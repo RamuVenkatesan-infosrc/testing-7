@@ -1,10 +1,12 @@
 // Use relative path when served from same origin, or absolute for standalone
-const API_BASE_URL = new URL('/api', window.location.origin).href;
+const API_BASE_URL = new URL('/api', window.location.origin).toString();
 
 // Global state
-let allAccounts = [];
-let currentTransactionTab = 'deposit';
-let confirmCallback = null;
+const appState = {
+    allAccounts: [],
+    currentTransactionTab: 'deposit',
+    confirmCallback: null
+};
 
 // Theme management
 function toggleTheme() {
@@ -94,17 +96,17 @@ function showConfirmModal(title, message, callback) {
     document.getElementById('confirmTitle').textContent = title;
     document.getElementById('confirmMessage').textContent = message;
     document.getElementById('confirmModal').classList.add('show');
-    confirmCallback = callback;
+    appState.confirmCallback = callback;
 }
 
 function hideConfirmModal() {
     document.getElementById('confirmModal').classList.remove('show');
-    confirmCallback = null;
+    appState.confirmCallback = null;
 }
 
 function confirmAction() {
-    if (confirmCallback && typeof confirmCallback === 'function') {
-        confirmCallback();
+    if (appState.confirmCallback && typeof appState.confirmCallback === 'function') {
+        appState.confirmCallback();
     }
     hideConfirmModal();
 }
@@ -161,7 +163,7 @@ function populateAccountDropdowns() {
         if (select) {
             const currentValue = select.value;
             select.innerHTML = '<option value="">Select account</option>';
-            allAccounts.forEach(account => {
+            appState.allAccounts.forEach(account => {
                 const option = document.createElement('option');
                 option.value = account.accountId;
                 option.textContent = `${formatAccountId(account.accountId)} - ${DOMPurify.sanitize(account.accountType)} (${formatCurrency(account.balance, account.currency)})`;
@@ -179,7 +181,7 @@ async function loadDashboard() {
     try {
         showLoading();
         const accounts = await apiCall('/accounts');
-        allAccounts = accounts;
+        appState.allAccounts = accounts;
         
         // Calculate stats
         const totalAccounts = accounts.length;
@@ -206,23 +208,31 @@ async function loadDashboard() {
                 </div>
             `;
         } else {
-            dashboardAccounts.innerHTML = accounts.slice(0, 4).map(account => `
-                <div class="account-card">
-                    <div class="account-header">
-                        <span class="account-type">${DOMPurify.sanitize(account.accountType)}</span>
-                        <span class="account-status ${account.active ? 'active' : 'inactive'}">
-                            ${account.active ? 'Active' : 'Inactive'}
-                        </span>
+            dashboardAccounts.innerHTML = accounts.slice(0, 4).map(account => {
+                const accountTypeEscaped = DOMPurify.sanitize(account.accountType);
+                const accountStatusClass = account.active ? 'active' : 'inactive';
+                const accountStatusText = account.active ? 'Active' : 'Inactive';
+                const balanceFormatted = formatCurrency(account.balance, account.currency);
+                const accountIdFormatted = formatAccountId(account.accountId);
+                
+                return `
+                    <div class="account-card">
+                        <div class="account-header">
+                            <span class="account-type">${accountTypeEscaped}</span>
+                            <span class="account-status ${accountStatusClass}">
+                                ${accountStatusText}
+                            </span>
+                        </div>
+                        <div class="account-balance">
+                            <div class="account-balance-label">Available Balance</div>
+                            <div class="account-balance-amount">${balanceFormatted}</div>
+                        </div>
+                        <div class="account-id">
+                            <strong>Account:</strong> ${accountIdFormatted}
+                        </div>
                     </div>
-                    <div class="account-balance">
-                        <div class="account-balance-label">Available Balance</div>
-                        <div class="account-balance-amount">${formatCurrency(account.balance, account.currency)}</div>
-                    </div>
-                    <div class="account-id">
-                        <strong>Account:</strong> ${formatAccountId(account.accountId)}
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         // Load recent activity (placeholder for now)
@@ -246,18 +256,27 @@ document.getElementById('createAccountForm').addEventListener('submit', async (e
     e.preventDefault();
     try {
         showLoading();
+        const customerId = document.getElementById('customerId').value;
+        const accountType = document.getElementById('accountType').value;
+        const initialBalance = parseFloat(document.getElementById('initialBalance').value);
+        const currency = document.getElementById('currency').value;
+
+        if (!customerId || !accountType || isNaN(initialBalance) || !currency) {
+            throw new Error('Please fill in all required fields with valid values.');
+        }
+
         const account = await apiCall('/accounts', 'POST', {
-            customerId: document.getElementById('customerId').value,
-            accountType: document.getElementById('accountType').value,
-            initialBalance: parseFloat(document.getElementById('initialBalance').value),
-            currency: document.getElementById('currency').value
+            customerId: customerId,
+            accountType: accountType,
+            initialBalance: initialBalance,
+            currency: currency
         });
         showToast(`Account created successfully! Account: ${formatAccountId(account.accountId)}`, 'success');
         document.getElementById('createAccountForm').reset();
         await loadAccounts();
         await loadDashboard();
     } catch (error) {
-        // Error already shown by apiCall
+        showToast(`Error: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -267,7 +286,7 @@ async function loadAccounts() {
     try {
         showLoading();
         const accounts = await apiCall('/accounts');
-        allAccounts = accounts;
+        appState.allAccounts = accounts;
         populateAccountDropdowns();
         
         const accountsList = document.getElementById('accountsList');
@@ -284,6 +303,7 @@ async function loadAccounts() {
         displayFilteredAccounts(accounts);
     } catch (error) {
         console.error('Error loading accounts:', error);
+        showToast(`Error loading accounts: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -293,7 +313,10 @@ document.getElementById('customerAccountsForm').addEventListener('submit', async
     e.preventDefault();
     try {
         const customerId = document.getElementById('customerIdSearch').value;
-        const accounts = await apiCall(`/accounts/customer/${customerId}`);
+        if (!customerId) {
+            throw new Error('Please enter a valid customer ID.');
+        }
+        const accounts = await apiCall(`/accounts/customer/${encodeURIComponent(customerId)}`);
         const customerAccountsList = document.getElementById('customerAccountsList');
         if (accounts.length === 0) {
             customerAccountsList.innerHTML = `
@@ -304,25 +327,33 @@ document.getElementById('customerAccountsForm').addEventListener('submit', async
             `;
             return;
         }
-        customerAccountsList.innerHTML = accounts.map(account => `
-            <div class="account-card">
-                <div class="account-header">
-                    <span class="account-type">${DOMPurify.sanitize(account.accountType)}</span>
-                    <span class="account-status ${account.active ? 'active' : 'inactive'}">
-                        ${account.active ? 'Active' : 'Inactive'}
-                    </span>
+        customerAccountsList.innerHTML = accounts.map(account => {
+            const accountTypeEscaped = DOMPurify.sanitize(account.accountType);
+            const accountStatusClass = account.active ? 'active' : 'inactive';
+            const accountStatusText = account.active ? 'Active' : 'Inactive';
+            const balanceFormatted = formatCurrency(account.balance, account.currency);
+            const accountIdFormatted = formatAccountId(account.accountId);
+            
+            return `
+                <div class="account-card">
+                    <div class="account-header">
+                        <span class="account-type">${accountTypeEscaped}</span>
+                        <span class="account-status ${accountStatusClass}">
+                            ${accountStatusText}
+                        </span>
+                    </div>
+                    <div class="account-balance">
+                        <div class="account-balance-label">Available Balance</div>
+                        <div class="account-balance-amount">${balanceFormatted}</div>
+                    </div>
+                    <div class="account-id">
+                        <strong>Account:</strong> ${accountIdFormatted}
+                    </div>
                 </div>
-                <div class="account-balance">
-                    <div class="account-balance-label">Available Balance</div>
-                    <div class="account-balance-amount">${formatCurrency(account.balance, account.currency)}</div>
-                </div>
-                <div class="account-id">
-                    <strong>Account:</strong> ${formatAccountId(account.accountId)}
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     } catch (error) {
-        // Error already shown by apiCall
+        showToast(`Error: ${error.message}`, 'error');
     }
 });
 
@@ -332,21 +363,28 @@ document.getElementById('depositForm').addEventListener('submit', async (e) => {
     try {
         showLoading();
         const accountId = document.getElementById('depositAccountId').value;
-        const account = allAccounts.find(acc => acc.accountId === accountId);
+        const amount = parseFloat(document.getElementById('depositAmount').value);
+        const description = document.getElementById('depositDescription').value;
+
+        if (!accountId || isNaN(amount) || amount <= 0 || !description) {
+            throw new Error('Please fill in all required fields with valid values.');
+        }
+
+        const account = appState.allAccounts.find(acc => acc.accountId === accountId);
         const currency = account ? account.currency : 'USD';
         
         const transaction = await apiCall('/transactions/deposit', 'POST', {
             accountId: accountId,
-            amount: parseFloat(document.getElementById('depositAmount').value),
+            amount: amount,
             currency: currency,
-            description: document.getElementById('depositDescription').value
+            description: description
         });
         showToast(`Deposit successful! Amount: ${formatCurrency(transaction.amount, transaction.currency)}`, 'success');
         document.getElementById('depositForm').reset();
         await loadAccounts();
         await loadDashboard();
     } catch (error) {
-        // Error already shown by apiCall
+        showToast(`Error: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -357,21 +395,28 @@ document.getElementById('withdrawForm').addEventListener('submit', async (e) => 
     try {
         showLoading();
         const accountId = document.getElementById('withdrawAccountId').value;
-        const account = allAccounts.find(acc => acc.accountId === accountId);
+        const amount = parseFloat(document.getElementById('withdrawAmount').value);
+        const description = document.getElementById('withdrawDescription').value;
+
+        if (!accountId || isNaN(amount) || amount <= 0 || !description) {
+            throw new Error('Please fill in all required fields with valid values.');
+        }
+
+        const account = appState.allAccounts.find(acc => acc.accountId === accountId);
         const currency = account ? account.currency : 'USD';
         
         const transaction = await apiCall('/transactions/withdraw', 'POST', {
             accountId: accountId,
-            amount: parseFloat(document.getElementById('withdrawAmount').value),
+            amount: amount,
             currency: currency,
-            description: document.getElementById('withdrawDescription').value
+            description: description
         });
         showToast(`Withdrawal successful! Amount: ${formatCurrency(transaction.amount, transaction.currency)}`, 'success');
         document.getElementById('withdrawForm').reset();
         await loadAccounts();
         await loadDashboard();
     } catch (error) {
-        // Error already shown by apiCall
+        showToast(`Error: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -383,45 +428,3 @@ document.getElementById('transferForm').addEventListener('submit', async (e) => 
     if (!validateTransferForm()) {
         return;
     }
-    
-    const fromAccountId = document.getElementById('fromAccountId').value;
-    const toAccountId = document.getElementById('toAccountId').value;
-    const amount = parseFloat(document.getElementById('transferAmount').value);
-    const description = document.getElementById('transferDescription').value;
-    
-    showConfirmModal(
-        'Confirm Transfer',
-        `Transfer ${formatCurrency(amount)} from ${formatAccountId(fromAccountId)} to ${formatAccountId(toAccountId)}?`,
-        async () => {
-            try {
-                showLoading();
-                const fromAccount = allAccounts.find(acc => acc.accountId === fromAccountId);
-                const currency = fromAccount ? fromAccount.currency : 'USD';
-                
-                const transaction = await apiCall('/transactions/transfer', 'POST', {
-                    fromAccountId: fromAccountId,
-                    toAccountId: toAccountId,
-                    amount: amount,
-                    currency: currency,
-                    description: description
-                });
-                
-                showToast(`Transfer successful! Amount: ${formatCurrency(transaction.amount, transaction.currency)}`, 'success');
-                document.getElementById('transferForm').reset();
-                document.getElementById('transferSummary').style.display = 'none';
-                await loadAccounts();
-                await loadDashboard();
-            } catch (error) {
-                // Error already shown by apiCall
-            } finally {
-                hideLoading();
-            }
-        }
-    );
-});
-
-document.getElementById('transactionHistoryForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try {
-        const accountId = document.getElementById('historyAccountId').value;
-        const transactions = await apiCall(`/transactions/account/${accountId}`);
