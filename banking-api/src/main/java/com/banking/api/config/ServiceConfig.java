@@ -4,6 +4,8 @@ import com.banking.account.service.AccountService;
 import com.banking.transaction.service.TransactionService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class ServiceConfig {
@@ -17,5 +19,9 @@ public class ServiceConfig {
     public TransactionService transactionService(AccountService accountService) {
         return new TransactionService(accountService);
     }
-}
 
+    @Bean
+    public List<String> allowedOrigins() {
+        return Arrays.asList("http://localhost:3000", "https://yourbankingapp.com");
+    }
+}
