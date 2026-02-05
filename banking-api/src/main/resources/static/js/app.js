@@ -425,3 +425,8 @@ document.getElementById('transactionHistoryForm').addEventListener('submit', asy
     try {
         const accountId = document.getElementById('historyAccountId').value;
         const transactions = await apiCall(`/transactions/account/${accountId}`);
+        displayTransactionHistory(transactions);
+    } catch (error) {
+        // Error already shown by apiCall
+    }
+});
