@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 public class TransactionController {
 
     private final TransactionService transactionService;
+    private final List<String> allowedOrigins = List.of("https://example.com", "https://banking.com");
 
     @Autowired
     public TransactionController(TransactionService transactionService) {
@@ -26,7 +27,10 @@ public class TransactionController {
     }
 
     @PostMapping("/deposit")
-    public ResponseEntity<TransactionResponse> deposit(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> deposit(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.deposit(
             request.getAccountId(),
             new Money(request.getAmount(), request.getCurrency()),
@@ -36,7 +40,10 @@ public class TransactionController {
     }
 
     @PostMapping("/withdraw")
-    public ResponseEntity<TransactionResponse> withdraw(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> withdraw(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.withdraw(
             request.getAccountId(),
             new Money(request.getAmount(), request.getCurrency()),
@@ -46,7 +53,10 @@ public class TransactionController {
     }
 
     @PostMapping("/transfer")
-    public ResponseEntity<TransactionResponse> transfer(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> transfer(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.transfer(
             request.getFromAccountId(),
             request.getToAccountId(),
@@ -57,7 +67,10 @@ public class TransactionController {
     }
 
     @GetMapping("/account/{accountId}")
-    public ResponseEntity<List<TransactionResponse>> getTransactionsByAccount(@PathVariable String accountId) {
+    public ResponseEntity<List<TransactionResponse>> getTransactionsByAccount(@PathVariable String accountId, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         List<Transaction> transactions = transactionService.getTransactionsByAccount(accountId);
         List<TransactionResponse> responses = transactions.stream()
             .map(this::toResponse)
@@ -66,7 +79,10 @@ public class TransactionController {
     }
 
     @GetMapping("/{transactionId}")
-    public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId) {
+    public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.getTransaction(transactionId);
         return ResponseEntity.ok(toResponse(transaction));
     }
@@ -82,5 +98,16 @@ public class TransactionController {
         response.setDescription(transaction.getDescription());
         response.setRelatedAccountId(transaction.getRelatedAccountId());
         return response;
+    }
+
+    private boolean validateCsrfToken(HttpServletRequest request) {
+        String csrfToken = request.getHeader("X-CSRF-TOKEN");
+        String sessionToken = (String) request.getSession().getAttribute("CSRF_TOKEN");
+        return csrfToken != null && csrfToken.equals(sessionToken);
+    }
+
+    private boolean validateOrigin(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        return origin != null && allowedOrigins.contains(origin);
     }
 }

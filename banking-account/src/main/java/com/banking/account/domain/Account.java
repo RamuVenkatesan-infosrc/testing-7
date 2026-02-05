@@ -8,9 +8,6 @@ import com.banking.core.exception.InvalidAccountException;
 import java.util.Objects;
 import java.util.UUID;
 
-/**
- * Represents a bank account with balance and account details.
- */
 public class Account {
     private final String accountId;
     private final String customerId;
@@ -118,4 +115,3 @@ public class Account {
                 accountId, customerId, accountType, balance, active);
     }
 }
-
