@@ -19,7 +19,6 @@ import java.util.stream.Collectors;
 public class TransactionController {
 
     private final TransactionService transactionService;
-    private final List<String> allowedOrigins = List.of("https://trusted-domain.com", "https://another-trusted-domain.com");
 
     @Autowired
     public TransactionController(TransactionService transactionService) {
@@ -28,7 +27,7 @@ public class TransactionController {
 
     @PostMapping("/deposit")
     public ResponseEntity<TransactionResponse> deposit(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
-        if (!isValidOrigin(servletRequest)) {
+        if (!CsrfUtil.validateCsrfToken(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.deposit(
@@ -41,7 +40,7 @@ public class TransactionController {
 
     @PostMapping("/withdraw")
     public ResponseEntity<TransactionResponse> withdraw(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
-        if (!isValidOrigin(servletRequest)) {
+        if (!CsrfUtil.validateCsrfToken(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.withdraw(
@@ -54,7 +53,7 @@ public class TransactionController {
 
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> transfer(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
-        if (!isValidOrigin(servletRequest)) {
+        if (!CsrfUtil.validateCsrfToken(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.transfer(
@@ -68,7 +67,7 @@ public class TransactionController {
 
     @GetMapping("/account/{accountId}")
     public ResponseEntity<List<TransactionResponse>> getTransactionsByAccount(@PathVariable String accountId, HttpServletRequest servletRequest) {
-        if (!isValidOrigin(servletRequest)) {
+        if (!CsrfUtil.validateCsrfToken(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         List<Transaction> transactions = transactionService.getTransactionsByAccount(accountId);
@@ -80,7 +79,7 @@ public class TransactionController {
 
     @GetMapping("/{transactionId}")
     public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId, HttpServletRequest servletRequest) {
-        if (!isValidOrigin(servletRequest)) {
+        if (!CsrfUtil.validateCsrfToken(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.getTransaction(transactionId);
@@ -98,10 +97,5 @@ public class TransactionController {
         response.setDescription(transaction.getDescription());
         response.setRelatedAccountId(transaction.getRelatedAccountId());
         return response;
-    }
-
-    private boolean isValidOrigin(HttpServletRequest request) {
-        String origin = request.getHeader("Origin");
-        return origin != null && allowedOrigins.contains(origin);
     }
 }
