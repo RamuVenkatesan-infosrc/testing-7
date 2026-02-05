@@ -13,11 +13,14 @@ import javax.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 @RestController
 @RequestMapping("/api/transactions")
 public class TransactionController {
 
+    private static final Logger LOGGER = Logger.getLogger(TransactionController.class.getName());
     private final TransactionService transactionService;
     private final List<String> allowedOrigins = List.of("https://trusted-domain.com", "https://another-trusted-domain.com");
 
@@ -102,6 +105,10 @@ public class TransactionController {
 
     private boolean isValidOrigin(HttpServletRequest request) {
         String origin = request.getHeader("Origin");
-        return origin != null && allowedOrigins.contains(origin);
+        if (origin == null || !allowedOrigins.contains(origin)) {
+            LOGGER.log(Level.WARNING, "Rejected request from origin: " + origin);
+            return false;
+        }
+        return true;
     }
 }
