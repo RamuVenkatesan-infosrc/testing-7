@@ -118,4 +118,3 @@ public class Account {
                 accountId, customerId, accountType, balance, active);
     }
 }
-

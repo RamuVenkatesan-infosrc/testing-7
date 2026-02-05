@@ -32,9 +32,9 @@ public class TransactionController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.deposit(
-            request.getAccountId(),
+            sanitizeInput(request.getAccountId()),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
@@ -45,9 +45,9 @@ public class TransactionController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.withdraw(
-            request.getAccountId(),
+            sanitizeInput(request.getAccountId()),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
@@ -58,10 +58,10 @@ public class TransactionController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         Transaction transaction = transactionService.transfer(
-            request.getFromAccountId(),
-            request.getToAccountId(),
+            sanitizeInput(request.getFromAccountId()),
+            sanitizeInput(request.getToAccountId()),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
@@ -71,7 +71,7 @@ public class TransactionController {
         if (!isValidOrigin(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        List<Transaction> transactions = transactionService.getTransactionsByAccount(accountId);
+        List<Transaction> transactions = transactionService.getTransactionsByAccount(sanitizeInput(accountId));
         List<TransactionResponse> responses = transactions.stream()
             .map(this::toResponse)
             .collect(Collectors.toList());
@@ -83,25 +83,43 @@ public class TransactionController {
         if (!isValidOrigin(servletRequest)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        Transaction transaction = transactionService.getTransaction(transactionId);
+        Transaction transaction = transactionService.getTransaction(sanitizeInput(transactionId));
         return ResponseEntity.ok(toResponse(transaction));
     }
 
     private TransactionResponse toResponse(Transaction transaction) {
         TransactionResponse response = new TransactionResponse();
-        response.setTransactionId(transaction.getTransactionId());
-        response.setAccountId(transaction.getAccountId());
-        response.setType(transaction.getType().name());
+        response.setTransactionId(sanitizeOutput(transaction.getTransactionId()));
+        response.setAccountId(sanitizeOutput(transaction.getAccountId()));
+        response.setType(sanitizeOutput(transaction.getType().name()));
         response.setAmount(transaction.getAmount().getAmount().doubleValue());
-        response.setCurrency(transaction.getAmount().getCurrency());
-        response.setTimestamp(transaction.getTimestamp().toString());
-        response.setDescription(transaction.getDescription());
-        response.setRelatedAccountId(transaction.getRelatedAccountId());
+        response.setCurrency(sanitizeOutput(transaction.getAmount().getCurrency()));
+        response.setTimestamp(sanitizeOutput(transaction.getTimestamp().toString()));
+        response.setDescription(sanitizeOutput(transaction.getDescription()));
+        response.setRelatedAccountId(sanitizeOutput(transaction.getRelatedAccountId()));
         return response;
     }
 
     private boolean isValidOrigin(HttpServletRequest request) {
         String origin = request.getHeader("Origin");
         return origin != null && allowedOrigins.contains(origin);
+    }
+
+    private String sanitizeInput(String input) {
+        if (input == null) {
+            return null;
+        }
+        return input.replaceAll("[<>\"'&]", "");
+    }
+
+    private String sanitizeOutput(String output) {
+        if (output == null) {
+            return null;
+        }
+        return output.replace("&", "&amp;")
+                     .replace("<", "&lt;")
+                     .replace(">", "&gt;")
+                     .replace("\"", "&quot;")
+                     .replace("'", "&#x27;");
     }
 }
