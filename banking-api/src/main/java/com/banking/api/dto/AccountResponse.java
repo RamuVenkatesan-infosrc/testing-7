@@ -56,4 +56,3 @@ public class AccountResponse {
         this.active = active;
     }
 }
-

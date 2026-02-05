@@ -16,7 +16,6 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/accounts")
-@CrossOrigin(origins = "*")
 public class AccountController {
 
     private final AccountService accountService;
