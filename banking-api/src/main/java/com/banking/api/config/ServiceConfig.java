@@ -18,4 +18,3 @@ public class ServiceConfig {
         return new TransactionService(accountService);
     }
 }
-
