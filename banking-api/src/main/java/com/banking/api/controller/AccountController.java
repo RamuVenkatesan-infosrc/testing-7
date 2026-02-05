@@ -10,13 +10,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/accounts")
-@CrossOrigin(origins = "*")
 public class AccountController {
 
     private final AccountService accountService;
@@ -68,11 +68,11 @@ public class AccountController {
 
     private AccountResponse toResponse(Account account) {
         AccountResponse response = new AccountResponse();
-        response.setAccountId(account.getAccountId());
-        response.setCustomerId(account.getCustomerId());
-        response.setAccountType(account.getAccountType().name());
+        response.setAccountId(StringEscapeUtils.escapeHtml4(account.getAccountId()));
+        response.setCustomerId(StringEscapeUtils.escapeHtml4(account.getCustomerId()));
+        response.setAccountType(StringEscapeUtils.escapeHtml4(account.getAccountType().name()));
         response.setBalance(account.getBalance().getAmount().doubleValue());
-        response.setCurrency(account.getBalance().getCurrency());
+        response.setCurrency(StringEscapeUtils.escapeHtml4(account.getBalance().getCurrency()));
         response.setActive(account.isActive());
         return response;
     }

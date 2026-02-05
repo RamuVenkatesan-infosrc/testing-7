@@ -1,5 +1,5 @@
 // Use relative path when served from same origin, or absolute for standalone
-const API_BASE_URL = new URL('/api', window.location.origin).href;
+const API_BASE_URL = '/api';
 
 // Global state
 const appState = {
@@ -155,6 +155,11 @@ function formatAccountId(accountId) {
     return accountId ? `${accountId.substring(0, 4)}-${accountId.substring(4, 8)}-${accountId.substring(8, 12)}-${accountId.substring(12, 16)}` : '';
 }
 
+// Sanitize input
+function sanitizeInput(input) {
+    return DOMPurify.sanitize(input);
+}
+
 // Populate account dropdowns
 function populateAccountDropdowns() {
     const selects = ['depositAccountId', 'withdrawAccountId', 'fromAccountId', 'toAccountId', 'historyAccountId'];
@@ -166,7 +171,7 @@ function populateAccountDropdowns() {
             appState.allAccounts.forEach(account => {
                 const option = document.createElement('option');
                 option.value = account.accountId;
-                option.textContent = `${formatAccountId(account.accountId)} - ${DOMPurify.sanitize(account.accountType)} (${formatCurrency(account.balance, account.currency)})`;
+                option.textContent = `${formatAccountId(account.accountId)} - ${sanitizeInput(account.accountType)} (${formatCurrency(account.balance, account.currency)})`;
                 if (account.accountId === currentValue) {
                     option.selected = true;
                 }
@@ -209,7 +214,7 @@ async function loadDashboard() {
             `;
         } else {
             dashboardAccounts.innerHTML = accounts.slice(0, 4).map(account => {
-                const accountTypeEscaped = DOMPurify.sanitize(account.accountType);
+                const accountTypeEscaped = sanitizeInput(account.accountType);
                 const accountStatusClass = account.active ? 'active' : 'inactive';
                 const accountStatusText = account.active ? 'Active' : 'Inactive';
                 const balanceFormatted = formatCurrency(account.balance, account.currency);
@@ -256,10 +261,10 @@ document.getElementById('createAccountForm').addEventListener('submit', async (e
     e.preventDefault();
     try {
         showLoading();
-        const customerId = document.getElementById('customerId').value;
-        const accountType = document.getElementById('accountType').value;
+        const customerId = sanitizeInput(document.getElementById('customerId').value);
+        const accountType = sanitizeInput(document.getElementById('accountType').value);
         const initialBalance = parseFloat(document.getElementById('initialBalance').value);
-        const currency = document.getElementById('currency').value;
+        const currency = sanitizeInput(document.getElementById('currency').value);
 
         if (!customerId || !accountType || isNaN(initialBalance) || !currency) {
             throw new Error('Please fill in all required fields with valid values.');
@@ -312,7 +317,7 @@ async function loadAccounts() {
 document.getElementById('customerAccountsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-        const customerId = document.getElementById('customerIdSearch').value;
+        const customerId = sanitizeInput(document.getElementById('customerIdSearch').value);
         if (!customerId) {
             throw new Error('Please enter a valid customer ID.');
         }
@@ -322,13 +327,13 @@ document.getElementById('customerAccountsForm').addEventListener('submit', async
             customerAccountsList.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-search"></i>
-                    <p>No accounts found for customer ${DOMPurify.sanitize(customerId)}.</p>
+                    <p>No accounts found for customer ${sanitizeInput(customerId)}.</p>
                 </div>
             `;
             return;
         }
         customerAccountsList.innerHTML = accounts.map(account => {
-            const accountTypeEscaped = DOMPurify.sanitize(account.accountType);
+            const accountTypeEscaped = sanitizeInput(account.accountType);
             const accountStatusClass = account.active ? 'active' : 'inactive';
             const accountStatusText = account.active ? 'Active' : 'Inactive';
             const balanceFormatted = formatCurrency(account.balance, account.currency);
@@ -362,9 +367,9 @@ document.getElementById('depositForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
         showLoading();
-        const accountId = document.getElementById('depositAccountId').value;
+        const accountId = sanitizeInput(document.getElementById('depositAccountId').value);
         const amount = parseFloat(document.getElementById('depositAmount').value);
-        const description = document.getElementById('depositDescription').value;
+        const description = sanitizeInput(document.getElementById('depositDescription').value);
 
         if (!accountId || isNaN(amount) || amount <= 0 || !description) {
             throw new Error('Please fill in all required fields with valid values.');
@@ -394,9 +399,9 @@ document.getElementById('withdrawForm').addEventListener('submit', async (e) => 
     e.preventDefault();
     try {
         showLoading();
-        const accountId = document.getElementById('withdrawAccountId').value;
+        const accountId = sanitizeInput(document.getElementById('withdrawAccountId').value);
         const amount = parseFloat(document.getElementById('withdrawAmount').value);
-        const description = document.getElementById('withdrawDescription').value;
+        const description = sanitizeInput(document.getElementById('withdrawDescription').value);
 
         if (!accountId || isNaN(amount) || amount <= 0 || !description) {
             throw new Error('Please fill in all required fields with valid values.');
@@ -421,10 +426,3 @@ document.getElementById('withdrawForm').addEventListener('submit', async (e) => 
         hideLoading();
     }
 });
-
-document.getElementById('transferForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    if (!validateTransferForm()) {
-        return;
-    }

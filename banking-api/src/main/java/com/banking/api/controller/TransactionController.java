@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletRequest;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 public class TransactionController {
 
     private final TransactionService transactionService;
+    private final List<String> allowedOrigins = List.of("https://example.com", "https://banking.com");
 
     @Autowired
     public TransactionController(TransactionService transactionService) {
@@ -26,38 +28,50 @@ public class TransactionController {
     }
 
     @PostMapping("/deposit")
-    public ResponseEntity<TransactionResponse> deposit(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> deposit(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.deposit(
             request.getAccountId(),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
 
     @PostMapping("/withdraw")
-    public ResponseEntity<TransactionResponse> withdraw(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> withdraw(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.withdraw(
             request.getAccountId(),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
 
     @PostMapping("/transfer")
-    public ResponseEntity<TransactionResponse> transfer(@RequestBody TransactionRequest request) {
+    public ResponseEntity<TransactionResponse> transfer(@RequestBody TransactionRequest request, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest) || !validateCsrfToken(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.transfer(
             request.getFromAccountId(),
             request.getToAccountId(),
             new Money(request.getAmount(), request.getCurrency()),
-            request.getDescription()
+            sanitizeInput(request.getDescription())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(transaction));
     }
 
     @GetMapping("/account/{accountId}")
-    public ResponseEntity<List<TransactionResponse>> getTransactionsByAccount(@PathVariable String accountId) {
+    public ResponseEntity<List<TransactionResponse>> getTransactionsByAccount(@PathVariable String accountId, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         List<Transaction> transactions = transactionService.getTransactionsByAccount(accountId);
         List<TransactionResponse> responses = transactions.stream()
             .map(this::toResponse)
@@ -66,21 +80,42 @@ public class TransactionController {
     }
 
     @GetMapping("/{transactionId}")
-    public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId) {
+    public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId, HttpServletRequest servletRequest) {
+        if (!validateOrigin(servletRequest)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         Transaction transaction = transactionService.getTransaction(transactionId);
         return ResponseEntity.ok(toResponse(transaction));
     }
 
     private TransactionResponse toResponse(Transaction transaction) {
         TransactionResponse response = new TransactionResponse();
-        response.setTransactionId(transaction.getTransactionId());
-        response.setAccountId(transaction.getAccountId());
-        response.setType(transaction.getType().name());
+        response.setTransactionId(sanitizeInput(transaction.getTransactionId()));
+        response.setAccountId(sanitizeInput(transaction.getAccountId()));
+        response.setType(sanitizeInput(transaction.getType().name()));
         response.setAmount(transaction.getAmount().getAmount().doubleValue());
-        response.setCurrency(transaction.getAmount().getCurrency());
-        response.setTimestamp(transaction.getTimestamp().toString());
-        response.setDescription(transaction.getDescription());
-        response.setRelatedAccountId(transaction.getRelatedAccountId());
+        response.setCurrency(sanitizeInput(transaction.getAmount().getCurrency()));
+        response.setTimestamp(sanitizeInput(transaction.getTimestamp().toString()));
+        response.setDescription(sanitizeInput(transaction.getDescription()));
+        response.setRelatedAccountId(sanitizeInput(transaction.getRelatedAccountId()));
         return response;
+    }
+
+    private boolean validateCsrfToken(HttpServletRequest request) {
+        String csrfToken = request.getHeader("X-CSRF-TOKEN");
+        String sessionToken = (String) request.getSession().getAttribute("CSRF_TOKEN");
+        return csrfToken != null && csrfToken.equals(sessionToken);
+    }
+
+    private boolean validateOrigin(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        return origin != null && allowedOrigins.contains(origin);
+    }
+
+    private String sanitizeInput(String input) {
+        if (input == null) {
+            return null;
+        }
+        return StringEscapeUtils.escapeHtml4(input);
     }
 }
